@@ -1,5 +1,6 @@
 import logging
 import uuid
+import os
 from html import escape
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -12,14 +13,15 @@ logging.basicConfig(
 # ========== 请替换为你自己的 Bot Token ==========
 TOKEN = "你的BOT_TOKEN"  # TODO: 从 BotFather 获取
 
-# ========== 会员图片路径（请自行准备图片） ==========
+# ========== 媒体文件路径（视频优先，图片备用） ==========
+VIDEO_PATH = "images/telegram_premium.mp4"
 IMAGE_PATH = "images/telegram_premium.jpg"
 
-# ========== 套餐信息 ==========
+# ========== 套餐信息（价格已修改） ==========
 PLANS = {
-    '3': ('3个月', '10 USDT'),
-    '6': ('6个月', '19 USDT'),
-    '12': ('1年', '26 USDT'),
+    '3': ('3个月', '12.88 USDT'),
+    '6': ('6个月', '16.66 USDT'),
+    '12': ('1年', '36.33 USDT'),
 }
 
 # ========== 收款地址 ==========
@@ -30,26 +32,47 @@ TRON_NETWORK = "TRC20"
 user_state = {}
 
 
-async def send_photo(chat_id, context, text, reply_markup=None):
+async def send_media(chat_id, context, text, reply_markup=None):
     """
-    发送带图消息；如果图片不存在，则降级为纯文字。
+    优先发送视频，如果视频不存在则尝试发送图片，最后降级为纯文字。
     """
-    try:
-        with open(IMAGE_PATH, 'rb') as photo:
-            await context.bot.send_photo(
-                chat_id=chat_id,
-                photo=photo,
-                caption=text,
-                reply_markup=reply_markup,
-                parse_mode='HTML'
-            )
-    except Exception:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            reply_markup=reply_markup,
-            parse_mode='HTML'
-        )
+    # 1. 尝试发送视频
+    if os.path.exists(VIDEO_PATH):
+        try:
+            with open(VIDEO_PATH, 'rb') as video:
+                await context.bot.send_video(
+                    chat_id=chat_id,
+                    video=video,
+                    caption=text,
+                    reply_markup=reply_markup,
+                    parse_mode='HTML'
+                )
+            return
+        except Exception as e:
+            print(f"发送视频失败: {e}")
+
+    # 2. 尝试发送图片
+    if os.path.exists(IMAGE_PATH):
+        try:
+            with open(IMAGE_PATH, 'rb') as photo:
+                await context.bot.send_photo(
+                    chat_id=chat_id,
+                    photo=photo,
+                    caption=text,
+                    reply_markup=reply_markup,
+                    parse_mode='HTML'
+                )
+            return
+        except Exception as e:
+            print(f"发送图片失败: {e}")
+
+    # 3. 降级为纯文字
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,9 +87,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🎁 充值后会员将以 <b>礼物形式</b> 在 <b>2分钟内</b> 到账～
 
 💎 <b>全网最低价</b>：
-👑 3个月：10 USDT
-✨ 6个月：19 USDT
-🚀 1年：26 USDT
+👑 3个月：12.88 USDT
+✨ 6个月：16.66 USDT
+🚀 1年：36.33 USDT
 
 请选择你要充值的套餐👇
 """
@@ -77,7 +100,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🚀 1年", callback_data='plan_12')],
     ]
 
-    await send_photo(chat_id, context, text, InlineKeyboardMarkup(keyboard))
+    await send_media(chat_id, context, text, InlineKeyboardMarkup(keyboard))
 
 
 async def plan_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,7 +125,7 @@ async def plan_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
 例如：<code>@zhangsan</code>
 """
 
-    await send_photo(chat_id, context, text)
+    await send_media(chat_id, context, text)
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -116,7 +139,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.message.text.strip()
 
     if not username.startswith('@'):
-        await send_photo(chat_id, context, "⚠️ 用户名格式不正确，请以 @ 开头，例如 @zhangsan")
+        await send_media(chat_id, context, "⚠️ 用户名格式不正确，请以 @ 开头，例如 @zhangsan")
         return
 
     safe_username = escape(username)
@@ -141,7 +164,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("❌ 取消", callback_data='cancel')],
     ]
 
-    await send_photo(chat_id, context, text, InlineKeyboardMarkup(keyboard))
+    await send_media(chat_id, context, text, InlineKeyboardMarkup(keyboard))
 
 
 async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -152,7 +175,7 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     state = user_state.get(chat_id)
     if not state or state.get('step') != 'awaiting_confirm':
-        await send_photo(chat_id, context, "⚠️ 订单状态异常，请重新开始 /start")
+        await send_media(chat_id, context, "⚠️ 订单状态异常，请重新开始 /start")
         return
 
     username = state.get('username')
@@ -179,7 +202,7 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
 
     keyboard = [[InlineKeyboardButton("🔍 到款检测", callback_data='check_payment')]]
-    await send_photo(chat_id, context, text, InlineKeyboardMarkup(keyboard))
+    await send_media(chat_id, context, text, InlineKeyboardMarkup(keyboard))
 
 
 async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -190,7 +213,7 @@ async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     state = user_state.get(chat_id)
     if not state or state.get('step') != 'awaiting_payment':
-        await send_photo(chat_id, context, "⚠️ 当前没有待支付订单，请重新开始 /start")
+        await send_media(chat_id, context, "⚠️ 当前没有待支付订单，请重新开始 /start")
         return
 
     text = f"""
@@ -205,7 +228,7 @@ async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
 
     keyboard = [[InlineKeyboardButton("🔍 再次检测", callback_data='check_payment')]]
-    await send_photo(chat_id, context, text, InlineKeyboardMarkup(keyboard))
+    await send_media(chat_id, context, text, InlineKeyboardMarkup(keyboard))
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -215,7 +238,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = query.message.chat_id
     user_state[chat_id] = {'step': None}
 
-    await send_photo(chat_id, context, "已取消，欢迎重新开始 /start")
+    await send_media(chat_id, context, "已取消，欢迎重新开始 /start")
 
 
 def main():
